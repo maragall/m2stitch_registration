@@ -1,0 +1,4 @@
+ndv
+tifffile>=2021.7.2
+zarr
+PyQt6 

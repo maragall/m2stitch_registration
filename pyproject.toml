@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "m2stitch"
+version = "0.6.5"
+description = "M2Stitch - Microscope image tile registration and stage coordinate correction"
+authors = ["Yohsuke T. Fukai <ysk@yfukai.net>"]
+license = "BSD-3-Clause"
+readme = "README.rst"
+homepage = "https://github.com/yfukai/m2stitch"
+repository = "https://github.com/yfukai/m2stitch"
+documentation = "https://m2stitch.readthedocs.io"
+classifiers = [
+    "Development Status :: 4 - Beta",
+]
+
+[tool.poetry.urls]
+Changelog = "https://github.com/yfukai/m2stitch/releases"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+click = ">=7.0"
+numpy = ">=1.14,<2"
+pandas = ">=1.0,<3"
+scikit-learn = ">=0.24,<2"
+tqdm = ">=4.61,<5"
+tifffile = ">=2021.7.2"
+importlib-metadata = {version = "^1.5.0", python = "<3.8"}
+
+[tool.poetry.scripts]
+m2stitch = "m2stitch.__main__:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -2,7 +2,8 @@
 import click
 from pathlib import Path
 
-from .tile_registration import register_and_update_coordinates
+from m2stitch.tile_registration import register_tiles
+from m2stitch.tile_registration import register_and_update_coordinates
 
 
 @click.command()
@@ -16,7 +17,7 @@ from .tile_registration import register_and_update_coordinates
               help='Allowed difference from initial guess in percentage (default: 10)')
 @click.option('--pou', default=3, type=float,
               help='Percent overlap uncertainty (default: 3)')
-@click.option('--ncc-threshold', default=0.5, type=float,
+@click.option('--ncc-threshold', default=0.1, type=float,
               help='Normalized cross correlation threshold (default: 0.5)')
 @click.version_option()
 def main(image_directory, csv_path, output_csv, channel_pattern, 

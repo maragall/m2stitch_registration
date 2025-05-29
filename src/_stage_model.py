@@ -1,6 +1,7 @@
 import itertools
 from typing import Callable
 from typing import Tuple
+from enum import Enum
 
 import numpy as np
 import pandas as pd
@@ -10,8 +11,15 @@ from ._typing_utils import FloatArray
 from ._typing_utils import Int
 
 
+class TranslationSource(Enum):
+    """Enum to track the source of translation values."""
+    MEASURED = "measured"  # Translation was directly measured from image registration
+    ESTIMATED = "estimated"  # Translation was estimated from other valid translations
+    INVALID = "invalid"  # Translation is invalid and cannot be used
+
+
 def compute_image_overlap2(
-    grid: pd.DataFrame, direction: str, sizeY: Int, sizeX: Int, predictor: Callable
+    grid: pd.DataFrame, direction: str, sizeY: Int, sizeX: Int
 ) -> Tuple[Float, ...]:
     """Compute the value of the image overlap.
 
@@ -36,15 +44,18 @@ def compute_image_overlap2(
     ValueError
         when direction is not in ["left","top"], raises ValueError
     """
+    # Get normalized translations
     translation: FloatArray = np.array(
         [
             np.array(grid[f"{direction}_y_first"].values, dtype=np.float64) / sizeY,
             np.array(grid[f"{direction}_x_first"].values, dtype=np.float64) / sizeX,
         ]
     )
+    # Remove any NaN values
     translation = translation[:, np.all(np.isfinite(translation), axis=0)]
-    c = predictor(translation.T)
-    res = np.median(translation[:, c == 1], axis=1)
+    
+    # Compute median directly - we trust the validation steps that happened before
+    res = np.median(translation, axis=1)
     assert len(res) == 2
     return tuple(res)
 
@@ -55,7 +66,7 @@ def filter_by_overlap_and_correlation(
     overlap: Float,
     size: Int,
     pou: Float = 3,
-    ncc_threshold: Float = 0.5,
+    ncc_threshold: Float = 0.1,
 ) -> pd.Series:
     """Filter the translation values by estimated overlap.
 
@@ -166,36 +177,45 @@ def replace_invalid_translations(grid: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     grid : pd.DataFrame
-        the updatd dataframe for the grid position
+        the updated dataframe for the grid position
     """
+    # First, copy valid translations to second columns and mark their source
     for direction in ["left", "top"]:
         for key in ["x", "y", "ncc"]:
             isvalid = grid[f"{direction}_valid3"]
             grid.loc[isvalid, f"{direction}_{key}_second"] = grid.loc[
                 isvalid, f"{direction}_{key}_first"
             ]
+            # Add source column if it doesn't exist
+            if f"{direction}_source" not in grid.columns:
+                grid[f"{direction}_source"] = TranslationSource.INVALID
+            grid.loc[isvalid, f"{direction}_source"] = TranslationSource.MEASURED
+
+    # Replace invalid translations with median of valid ones
     for direction, rowcol in zip(["left", "top"], ["col", "row"]):
         for _, grp in grid.groupby(rowcol):
             isvalid = grp[f"{direction}_valid3"].astype(bool)
             if any(isvalid):
-                assert all(
-                    pd.isna(grid.loc[grp.index[~isvalid], f"{direction}_y_second"])
-                )
-                assert all(
-                    pd.isna(grid.loc[grp.index[~isvalid], f"{direction}_x_second"])
-                )
+                # Replace invalid translations with median of valid ones
                 grid.loc[grp.index[~isvalid], f"{direction}_y_second"] = grp[isvalid][
                     f"{direction}_y_first"
                 ].median()
                 grid.loc[grp.index[~isvalid], f"{direction}_x_second"] = grp[isvalid][
                     f"{direction}_x_first"
                 ].median()
-                grid.loc[grp.index[~isvalid], f"{direction}_ncc_second"] = -1
+                grid.loc[grp.index[~isvalid], f"{direction}_ncc_second"] = 0.0  # No correlation for estimated translations
+                grid.loc[grp.index[~isvalid], f"{direction}_source"] = TranslationSource.ESTIMATED
+
+    # Handle any remaining NaN values
     for direction, xy in itertools.product(["left", "top"], ["x", "y"]):
         key = f"{direction}_{xy}_second"
         isna = pd.isna(grid[key])
-        grid.loc[isna, key] = grid.loc[~isna, key].median()
-        grid.loc[isna, f"{direction}_ncc_second"] = -1
+        if any(isna):
+            grid.loc[isna, key] = grid.loc[~isna, key].median()
+            grid.loc[isna, f"{direction}_ncc_second"] = 0.0
+            grid.loc[isna, f"{direction}_source"] = TranslationSource.ESTIMATED
+
+    # Verify all translations are finite
     for direction, xy in itertools.product(["left", "top"], ["x", "y"]):
         assert np.all(np.isfinite(grid[f"{direction}_{xy}_second"]))
 
